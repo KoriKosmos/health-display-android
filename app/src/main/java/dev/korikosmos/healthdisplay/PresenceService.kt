@@ -20,6 +20,7 @@ import dev.korikosmos.healthdisplay.presence.ActivityBuilder
 import dev.korikosmos.healthdisplay.presence.Config
 import dev.korikosmos.healthdisplay.pulsoid.HeartRate
 import dev.korikosmos.healthdisplay.pulsoid.Pulsoid
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -89,7 +90,13 @@ class PresenceService : LifecycleService() {
             val hs = HealthStats(this@PresenceService, cfg)
             launch {
                 while (true) {
-                    stats = runCatching { hs.refresh() }.getOrElse { AppLog.log("health", "$it"); stats }
+                    try {
+                        stats = hs.refresh()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        AppLog.log("health", "$e")
+                    }
                     delay((cfg.statsInterval * 1000).toLong())
                 }
             }

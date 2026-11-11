@@ -26,6 +26,7 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import dev.korikosmos.healthdisplay.AppLog
 import dev.korikosmos.healthdisplay.presence.Config
+import kotlinx.coroutines.CancellationException
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -84,6 +85,8 @@ class HealthStats(context: Context, private val config: Config) {
         suspend fun step(name: String, block: suspend () -> Unit) {
             try {
                 block()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: SecurityException) {
                 AppLog.log("health", "$name: permission not granted")
             } catch (e: Exception) {

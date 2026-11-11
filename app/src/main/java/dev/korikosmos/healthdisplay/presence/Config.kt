@@ -4,7 +4,7 @@ package dev.korikosmos.healthdisplay.presence
  * Settings using the same keys and defaults as the server's config.env, so a pasted
  * config.env behaves the same on the phone. Unknown keys are kept (e.g. SOURCE_<GROUP>).
  */
-class Config(val values: Map<String, String> = emptyMap()) {
+data class Config(val values: Map<String, String> = emptyMap()) {
     operator fun get(key: String): String = values[key] ?: DEFAULTS[key] ?: ""
 
     fun double(key: String): Double = this[key].toDoubleOrNull() ?: DEFAULTS.getValue(key).toDouble()

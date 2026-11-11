@@ -25,4 +25,9 @@ class ConfigTest {
         assertEquals(3.0, c.pollInterval, 0.0)
         assertEquals(1.5, c.statMaxAgeDays, 0.0)
     }
+
+    @Test fun equalValuesAreEqualConfigs() {
+        // The service restarts its loop when the config changes; identical values must not count.
+        assertEquals(Config(mapOf("A" to "1")), Config(mapOf("A" to "1")))
+    }
 }
