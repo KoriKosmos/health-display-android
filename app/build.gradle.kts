@@ -3,6 +3,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// The Discord Social SDK is downloaded from the developer portal into
+// third_party/discord_social_sdk/ (gitignored). Without it the app still builds,
+// with presence disabled.
+val discordAar: File? = rootProject.file("third_party/discord_social_sdk")
+    .walkTopDown().firstOrNull { it.name == "discord_partner_sdk.aar" }
+val hasDiscordSdk = discordAar != null
+
 android {
     namespace = "dev.korikosmos.healthdisplay"
     compileSdk = 37
@@ -13,6 +20,18 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("boolean", "HAS_DISCORD_SDK", hasDiscordSdk.toString())
+        ndk { abiFilters += "arm64-v8a" }
+    }
+
+    ndkVersion = "28.2.13676358"
+    if (hasDiscordSdk) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.31.6"
+            }
+        }
     }
 
     buildTypes {
@@ -22,6 +41,8 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+        prefab = hasDiscordSdk
     }
 }
 
@@ -40,6 +61,10 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.kotlinx.coroutines.android)
+    if (discordAar != null) {
+        implementation(files(discordAar))
+        implementation(libs.androidx.browser) // required by the SDK's Android glue
+    }
 
     testImplementation(libs.junit)
 }
