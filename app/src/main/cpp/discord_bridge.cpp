@@ -62,7 +62,7 @@ Java_dev_korikosmos_healthdisplay_discord_DiscordPresence_nativeInit(JNIEnv *, j
     gClient = std::make_shared<discordpp::Client>();
     gClient->AddLogCallback(
         [](std::string message, discordpp::LoggingSeverity) { toKotlinLog(message); },
-        discordpp::LoggingSeverity::Info);
+        discordpp::LoggingSeverity::Verbose);
     gClient->SetApplicationId(static_cast<uint64_t>(appId));
 }
 
@@ -87,7 +87,7 @@ Java_dev_korikosmos_healthdisplay_discord_DiscordPresence_nativeUpdate(
         a.SetTimestamps(ts);
     }
     gClient->UpdateRichPresence(a, [](discordpp::ClientResult r) {
-        toKotlinResult(r.Successful(), r.Successful() ? "" : r.Error());
+        toKotlinResult(r.Successful(), r.Successful() ? "" : r.ToString());
     });
 }
 

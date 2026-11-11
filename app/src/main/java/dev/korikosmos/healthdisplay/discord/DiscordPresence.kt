@@ -2,10 +2,12 @@ package dev.korikosmos.healthdisplay.discord
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.HandlerThread
 import dev.korikosmos.healthdisplay.AppLog
 import dev.korikosmos.healthdisplay.BuildConfig
+import kotlin.concurrent.thread
 
 /** What Discord shows. Empty strings are left out. */
 data class PresenceActivity(
@@ -62,6 +64,8 @@ object DiscordPresence {
         if (thread != null && this.appId == appId) return
         if (thread != null) stop()
         setContext(context)
+        startSdkLogcat()
+        AppLog.log("discord", discordAppStatus(context))
         this.appId = appId
         val t = HandlerThread("discord").also { it.start() }
         thread = t
@@ -89,6 +93,42 @@ object DiscordPresence {
         thread = null; handler = null; appId = null
         AppLog.log("discord", "stopped")
     }
+
+    /** Whether the Discord app is installed and exposes the Social SDK's presence (RPC) service. */
+    fun discordAppStatus(context: Context): String {
+        val pm = context.packageManager
+        val version = runCatching { pm.getPackageInfo(DISCORD_PACKAGE, 0) }.getOrNull()
+            ?.let { "${it.versionName} (${it.longVersionCode})" }
+            ?: return "Discord app ($DISCORD_PACKAGE) not installed or not visible"
+        val service = pm.resolveService(Intent(RPC_ACTION).setPackage(DISCORD_PACKAGE), 0)
+        return "Discord app $version; presence service " +
+            if (service != null) "found (${service.serviceInfo.name})" else "NOT found"
+    }
+
+    private var logcatStarted = false
+
+    /**
+     * The SDK's Java glue logs connection failures (bind denied, handshake failed…) to logcat
+     * under "DiscordSocialSdk"; mirror our own process's lines into the app log.
+     */
+    private fun startSdkLogcat() {
+        if (logcatStarted) return
+        logcatStarted = true
+        thread(isDaemon = true, name = "sdk-logcat") {
+            runCatching {
+                val p = ProcessBuilder(
+                    "logcat", "-v", "brief", "-T", "1", "--pid=${android.os.Process.myPid()}",
+                    "DiscordSocialSdk:V", "*:S",
+                ).redirectErrorStream(true).start()
+                p.inputStream.bufferedReader().forEachLine {
+                    if (it.isNotBlank() && !it.startsWith("-----")) AppLog.log("discord-java", it.trim())
+                }
+            }.onFailure { AppLog.log("discord", "logcat reader failed: $it") }
+        }
+    }
+
+    private const val DISCORD_PACKAGE = "com.discord"
+    private const val RPC_ACTION = "com.discord.socialsdk.rpc.IDiscordRpcService"
 
     @JvmStatic private fun onNativeLog(msg: String) = AppLog.log("discord-sdk", msg.trim())
 

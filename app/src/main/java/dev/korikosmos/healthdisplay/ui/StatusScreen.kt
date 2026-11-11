@@ -42,6 +42,7 @@ fun StatusScreen() {
                 if (!DiscordPresence.available) Text("Discord Social SDK missing from this build", color = MaterialTheme.colorScheme.error)
                 if (status.problem.isNotEmpty()) Text(status.problem, color = MaterialTheme.colorScheme.error)
                 Text("Discord: ${DiscordPresence.lastResult}")
+                Text(DiscordPresence.discordAppStatus(ctx), style = MaterialTheme.typography.bodySmall)
                 if (status.pulsoid.isNotEmpty()) Text("Pulsoid: ${status.pulsoid}")
                 if (status.lastPush.isNotEmpty()) Text("Last push: ${status.lastPush}")
             }
