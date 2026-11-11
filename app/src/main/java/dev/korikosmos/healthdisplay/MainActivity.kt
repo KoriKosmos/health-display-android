@@ -21,7 +21,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import dev.korikosmos.healthdisplay.config.ConfigStore
-import dev.korikosmos.healthdisplay.discord.DiscordPresence
 import dev.korikosmos.healthdisplay.ui.HealthScreen
 import dev.korikosmos.healthdisplay.ui.SettingsScreen
 import dev.korikosmos.healthdisplay.ui.StatusScreen
@@ -32,7 +31,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        DiscordPresence.attachActivity(this)
         askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         val store = ConfigStore(this)
         enableEdgeToEdge()

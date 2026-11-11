@@ -1,6 +1,7 @@
 package dev.korikosmos.healthdisplay.discord
 
 import android.app.Activity
+import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
 import dev.korikosmos.healthdisplay.AppLog
@@ -39,24 +40,28 @@ object DiscordPresence {
             .onFailure { AppLog.log("discord", "native bridge failed to load: $it") }.isSuccess
     }
 
-    /** The SDK's Android glue wants an Activity once; call from MainActivity.onCreate. */
-    fun attachActivity(activity: Activity) {
-        if (!available) return
+    private var contextSet = false
+
+    /** Hands the SDK's Android glue its context (see [EngineContext]); once per process. */
+    private fun setContext(context: Context) {
+        if (contextSet) return
         runCatching {
             Class.forName("com.discord.socialsdk.DiscordSocialSdkInit")
                 .getMethod("setEngineActivity", Activity::class.java)
-                .invoke(null, activity)
+                .invoke(null, EngineContext(context))
+            contextSet = true
         }.onFailure { AppLog.log("discord", "setEngineActivity failed: $it") }
     }
 
     @Synchronized
-    fun start(appId: Long) {
+    fun start(context: Context, appId: Long) {
         if (!available) {
             lastResult = "Discord Social SDK missing from this build"
             AppLog.log("discord", lastResult); return
         }
         if (thread != null && this.appId == appId) return
         if (thread != null) stop()
+        setContext(context)
         this.appId = appId
         val t = HandlerThread("discord").also { it.start() }
         thread = t

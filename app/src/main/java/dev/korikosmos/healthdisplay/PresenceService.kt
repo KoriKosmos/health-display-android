@@ -79,7 +79,7 @@ class PresenceService : LifecycleService() {
             problem("Set the Pulsoid token and Discord application ID in Settings"); return@coroutineScope
         }
         _status.update { it.copy(problem = "") }
-        DiscordPresence.start(appId)
+        DiscordPresence.start(this@PresenceService, appId)
 
         val hr = HeartRate()
         val pulsoid = Pulsoid(token, cfg.pollInterval) { bpm, ms -> hr.add(bpm, ms) }
@@ -131,7 +131,7 @@ class PresenceService : LifecycleService() {
     private suspend fun testLoop() {
         val appId = ConfigStore(this).load()["DISCORD_APP_ID"].toLongOrNull()
             ?: return problem("Set the Discord application ID in Settings")
-        DiscordPresence.start(appId)
+        DiscordPresence.start(this@PresenceService, appId)
         val started = System.currentTimeMillis()
         var n = 0
         while (true) {
