@@ -22,6 +22,8 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.aggregate.AggregateMetric
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import dev.korikosmos.healthdisplay.AppLog
@@ -218,6 +220,55 @@ class HealthStats(context: Context, private val config: Config) {
 
         AppLog.log("health", v.entries.sortedBy { it.key }.joinToString(", ") { "${it.key}=${it.value}" }.ifEmpty { "no stats" })
         return v
+    }
+
+    /**
+     * How today's totals were chosen: Health Connect's own de-duplicated total across all
+     * apps, then each feed's total, record count and newest record. Records that started
+     * before midnight are not counted (as on the server) and are listed separately.
+     */
+    suspend fun todayBreakdown(): String = buildString {
+        val midnight = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+        val now = Instant.now()
+        val hhmm = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
+
+        suspend fun <T : Record> section(
+            label: String, type: KClass<T>, metric: AggregateMetric<*>,
+            start: (T) -> Instant, end: (T) -> Instant, value: (T) -> Double, fmt: (Double) -> String,
+        ) {
+            append("== $label\n")
+            try {
+                val all = when (val x = client.aggregate(AggregateRequest(setOf(metric), TimeRangeFilter.between(midnight, now)))[metric]) {
+                    is Long -> x.toDouble()
+                    is Double -> x
+                    is androidx.health.connect.client.units.Length -> x.inKilometers
+                    is androidx.health.connect.client.units.Energy -> x.inKilocalories
+                    else -> null
+                }
+                append("   Health Connect total (all apps, de-duplicated): ${all?.let(fmt) ?: "none"}\n")
+                val rs = read(type, midnight.minus(Duration.ofDays(1)), now.plus(Duration.ofDays(1)))
+                    .filter { end(it).isAfter(midnight) }
+                val (today, before) = rs.partition { !start(it).isBefore(midnight) }
+                today.groupBy(::feedOf).entries.sortedByDescending { e -> e.value.sumOf(value) }.forEach { (f, xs) ->
+                    append("   ${f.source} [${f.pkg}${if (f.device.isNotEmpty()) " · ${f.device}" else " · no device"}]: " +
+                        "${fmt(xs.sumOf(value))} in ${xs.size} records, newest ends ${hhmm.format(xs.maxOf(end))}\n")
+                }
+                if (before.isNotEmpty()) append("   (not counted: ${before.size} records starting before midnight, ${fmt(before.sumOf(value))})\n")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                append("   $e\n")
+            }
+        }
+
+        section("steps", StepsRecord::class, StepsRecord.COUNT_TOTAL, { it.startTime }, { it.endTime },
+            { it.count.toDouble() }, ::thousands)
+        section("distance (km)", DistanceRecord::class, DistanceRecord.DISTANCE_TOTAL, { it.startTime }, { it.endTime },
+            { it.distance.inKilometers }) { "%.2f".format(Locale.US, it) }
+        section("active kcal", ActiveCaloriesBurnedRecord::class, ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL,
+            { it.startTime }, { it.endTime }, { it.energy.inKilocalories }, ::thousands)
+        section("total kcal", TotalCaloriesBurnedRecord::class, TotalCaloriesBurnedRecord.ENERGY_TOTAL,
+            { it.startTime }, { it.endTime }, { it.energy.inKilocalories }, ::thousands)
     }
 
     /** What each record type holds over the last 7 days, per app and device (like the server's probe). */

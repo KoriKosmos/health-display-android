@@ -55,8 +55,10 @@ fun HealthScreen(store: ConfigStore) {
             OutlinedButton(onClick = {
                 scope.launch {
                     output = "Reading…"
-                    val v = HealthStats(ctx, store.load()).refresh()
-                    output = v.entries.sortedBy { it.key }.joinToString("\n") { "{${it.key}} = ${it.value}" }.ifEmpty { "No stats" }
+                    val hs = HealthStats(ctx, store.load())
+                    val v = hs.refresh()
+                    output = v.entries.sortedBy { it.key }.joinToString("\n") { "{${it.key}} = ${it.value}" }.ifEmpty { "No stats" } +
+                        "\n\nHow today's totals were picked:\n" + hs.todayBreakdown()
                 }
             }) { Text("Current stats") }
             OutlinedButton(onClick = {
