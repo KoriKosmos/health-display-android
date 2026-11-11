@@ -24,6 +24,7 @@ object DiscordPresence {
     @Volatile var available = false; private set
     @Volatile var lastResult: String = "not started"; private set
 
+    private var appId: Long? = null
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private val pump = object : Runnable {
@@ -54,7 +55,9 @@ object DiscordPresence {
             lastResult = "Discord Social SDK missing from this build"
             AppLog.log("discord", lastResult); return
         }
-        if (thread != null) return
+        if (thread != null && this.appId == appId) return
+        if (thread != null) stop()
+        this.appId = appId
         val t = HandlerThread("discord").also { it.start() }
         thread = t
         handler = Handler(t.looper).also {
@@ -78,7 +81,7 @@ object DiscordPresence {
         h.removeCallbacks(pump)
         h.post { nativeShutdown(); nativeRunCallbacks() }
         thread?.quitSafely()
-        thread = null; handler = null
+        thread = null; handler = null; appId = null
         AppLog.log("discord", "stopped")
     }
 
