@@ -66,6 +66,7 @@ object DiscordPresence {
         setContext(context)
         startSdkLogcat()
         AppLog.log("discord", discordAppStatus(context))
+        selectProvider(context)
         this.appId = appId
         val t = HandlerThread("discord").also { it.start() }
         thread = t
@@ -94,15 +95,44 @@ object DiscordPresence {
         AppLog.log("discord", "stopped")
     }
 
-    /** Whether the Discord app is installed and exposes the Social SDK's presence (RPC) service. */
+    /** Packages offering the Social SDK's presence (RPC) service, official Discord first. */
+    fun rpcProviders(context: Context): List<String> =
+        context.packageManager.queryIntentServices(Intent(RPC_ACTION), 0)
+            .map { it.serviceInfo.packageName }.distinct()
+            .sortedBy { if (it == DISCORD_PACKAGE) 0 else 1 }
+
+    /** Which Discord app(s) offer the presence service, for the status screen and log. */
     fun discordAppStatus(context: Context): String {
         val pm = context.packageManager
-        val version = runCatching { pm.getPackageInfo(DISCORD_PACKAGE, 0) }.getOrNull()
-            ?.let { "${it.versionName} (${it.longVersionCode})" }
-            ?: return "Discord app ($DISCORD_PACKAGE) not installed or not visible"
-        val service = pm.resolveService(Intent(RPC_ACTION).setPackage(DISCORD_PACKAGE), 0)
-        return "Discord app $version; presence service " +
-            if (service != null) "found (${service.serviceInfo.name})" else "NOT found"
+        fun version(pkg: String) = runCatching { pm.getPackageInfo(pkg, 0) }.getOrNull()
+            ?.let { "${it.versionName} (${it.longVersionCode})" } ?: "?"
+        val providers = rpcProviders(context)
+        val official = runCatching { pm.getPackageInfo(DISCORD_PACKAGE, 0) }.isSuccess
+        return when {
+            providers.isNotEmpty() -> "Presence service offered by: " +
+                providers.joinToString { "$it ${version(it)}" } +
+                if (providers.first() != DISCORD_PACKAGE) " (official $DISCORD_PACKAGE ${if (official) "installed without it" else "not installed"})" else ""
+            official -> "Discord app ${version(DISCORD_PACKAGE)} installed, but it has no presence service (too old?)"
+            else -> "No installed app offers Discord's presence service ($DISCORD_PACKAGE not installed or not visible)"
+        }
+    }
+
+    /**
+     * The SDK only looks for the official package (DiscordRpcClient.DISCORD_PACKAGES =
+     * ["com.discord"]). If that isn't installed but another Discord build (e.g. a client
+     * mod under its own package name) offers the same presence service, point the SDK at it.
+     */
+    private fun selectProvider(context: Context) {
+        val target = rpcProviders(context).firstOrNull() ?: return
+        if (target == DISCORD_PACKAGE) return
+        runCatching {
+            val f = Class.forName("com.discord.socialsdk.DiscordRpcClient").getDeclaredField("DISCORD_PACKAGES")
+            f.isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            val packages = f.get(null) as Array<String>
+            packages[0] = target
+            AppLog.log("discord", "using presence service from $target")
+        }.onFailure { AppLog.log("discord", "could not select $target: $it") }
     }
 
     private var logcatStarted = false
