@@ -14,6 +14,8 @@ data class Config(val values: Map<String, String> = emptyMap()) {
     val staleAfter get() = double("STALE_AFTER")
     val statsInterval get() = double("STATS_INTERVAL")
     val statMaxAgeDays get() = double("STAT_MAX_AGE_DAYS")
+    val googleInterval get() = double("GOOGLE_INTERVAL")
+    val googleOn get() = this["GOOGLE_HEALTH"].equals("on", ignoreCase = true)
     val imageOn get() = !this["IMAGE"].equals("off", ignoreCase = true)
 
     /** Source preference for a stat group: SOURCE_<GROUP>, else SOURCE_DEFAULT. */
@@ -33,8 +35,14 @@ data class Config(val values: Map<String, String> = emptyMap()) {
             "STAT_MAX_AGE_DAYS" to "1.5",
             "IMAGE" to "on", "IMG_TEXT" to "{bpm}", "IMG_BG" to "ED4245", "IMG_FG" to "FFFFFF",
             "POLL_INTERVAL" to "3", "UPDATE_INTERVAL" to "15", "STALE_AFTER" to "60",
-            // Phone-only: how often Health Connect is read (server: GOOGLE_INTERVAL).
+            // Phone-only: how often Health Connect is read.
             "STATS_INTERVAL" to "900",
+            // Google Health API: main source when signed in (on/off), refresh interval (s), and
+            // which source family gives today's totals: all-sources = watch + phone merged by
+            // Google (what the Google Health app shows), google-wearables = watch only.
+            "GOOGLE_HEALTH" to "off",
+            "GOOGLE_INTERVAL" to "300",
+            "GOOGLE_TOTALS" to "all-sources",
         )
 
         /** Parse KEY=VALUE lines like the server does (comments and blank lines skipped). */

@@ -36,9 +36,9 @@ class ConfigStore(private val context: Context) {
         }
     }
 
-    /** Import a pasted config.env; keys only the server uses (Google OAuth etc.) are skipped. */
+    /** Import a pasted config.env; keys only the server uses (its Google OAuth client etc.) are skipped. */
     suspend fun importEnv(text: String): Int {
-        val values = Config.parseEnv(text).filterKeys { k -> SERVER_ONLY.none { k.startsWith(it) } }
+        val values = Config.parseEnv(text).filterKeys { it !in SERVER_ONLY }
         save(values)
         return values.size
     }
@@ -62,6 +62,8 @@ class ConfigStore(private val context: Context) {
         private const val ENC = "__enc"
         private val RUNNING = booleanPreferencesKey("__running")
         val SECRETS = setOf("PULSOID_TOKEN")
-        private val SERVER_ONLY = listOf("GOOGLE_", "ROLLUP_SOURCES")
+        // The phone signs in to Google through Play services, and uses GOOGLE_TOTALS instead of
+        // the server's per-feed totals + ROLLUP_SOURCES.
+        private val SERVER_ONLY = setOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ROLLUP_SOURCES")
     }
 }

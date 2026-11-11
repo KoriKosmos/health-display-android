@@ -39,6 +39,9 @@ android {
             isMinifyEnabled = false
         }
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true // android.util.Log in AppLog
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -64,10 +67,13 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.health.connect)
+    implementation(libs.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
     if (discordAar != null) {
         implementation(files(discordAar))
         implementation(libs.androidx.browser) // required by the SDK's Android glue
     }
 
     testImplementation(libs.junit)
+    testImplementation(libs.org.json) // real org.json for parsing tests (Android's is a stub on the JVM)
 }
