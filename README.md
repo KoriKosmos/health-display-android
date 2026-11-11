@@ -1,8 +1,8 @@
-# hr-rpc-android
+# Health Display for Android
 
 Android app that shows live heart rate and daily health stats as Discord Rich
 Presence, straight from the phone. Android counterpart of
-[hr-rpc](https://github.com/KoriKosmos/hr-rpc).
+[Health Display](https://github.com/KoriKosmos/hr-rpc).
 
 - **Live BPM:** Pulsoid
 - **Daily stats:** Health Connect (Pixel Watch, Oura, Ultrahuman, …)
