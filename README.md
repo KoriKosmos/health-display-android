@@ -6,13 +6,14 @@ Presence, straight from the phone. Android counterpart of
 layout, placeholders and config.env keys.
 
 - **Live BPM:** Pulsoid real-time WebSocket (REST polling while it's down)
-- **Daily stats:** Health Connect: every app/device that writes there (Pixel
-  Watch, Oura, Ultrahuman, phone, anything new) is a fallback for the others
+- **Daily stats:** Google Health API (main source, same numbers as the Google
+  Health app), with Health Connect filling the gaps and providing stats Google
+  doesn't have ({mindful})
 - **Discord:** official Discord Social SDK Rich Presence, no auth (needs the
   Discord app installed and signed in). No user token, no selfbot.
 
-Status: feature-complete first version. The presence path has not been tested
-on a device yet.
+Status: working on a Pixel 9 Pro XL with ShiggyCord (a Discord client mod; the
+app uses whichever installed Discord build offers the presence service).
 
 ## Discord Social SDK
 
@@ -44,34 +45,51 @@ echo "sdk.dir=$HOME/opt/android-sdk" > local.properties
 ## Settings
 
 All config.env keys from the server work the same; paste the whole file into
-Settings → Import config.env (Google OAuth keys are ignored). The Pulsoid token
+Settings → Import config.env (the server's Google OAuth client keys are ignored). The Pulsoid token
 is stored encrypted with an Android Keystore key.
 
-Phone-only key: `STATS_INTERVAL` (seconds between Health Connect reads,
-default 900).
+Phone-only keys: `GOOGLE_HEALTH` (set by signing in), `GOOGLE_TOTALS`,
+`STATS_INTERVAL`. The server's `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and
+`ROLLUP_SOURCES` are ignored on import.
 
-### Source selection
+### Google Health (main source)
 
-Same rules as the server:
+Health tab → Sign in to Google Health. Sign-in goes through Google Play
+services; it needs an **Android** OAuth client in the same Google Cloud project
+as the server's, with package `dev.korikosmos.healthdisplay` and the SHA-1 of
+the signing key (`keytool -list -v -keystore ~/.android/debug.keystore
+-storepass android`). No client secret is stored on the phone. If the project's
+OAuth consent screen is in Testing mode, Google expires the sign-in after 7
+days.
 
-- **Today's totals** (steps, distance, active minutes, active/total kcal,
-  floors, food kcal): total per data feed (app + device), the feed with the
+- **Today's totals** (steps, distance, calories, active kcal, active minutes,
+  active zone minutes, floors): Google's daily rollups for `GOOGLE_TOTALS`,
+  default `all-sources` (watch and phone merged and de-duplicated by Google:
+  the numbers the Google Health app shows). `google-wearables` = watch only.
+- **Overnight stats, sleep, workout, weight, food, glucose, ECG**: as on the
+  server: the most recent day or night from any source, `SOURCE_DEFAULT` /
+  `SOURCE_<GROUP>` breaking ties, hidden when older than `STAT_MAX_AGE_DAYS`.
+- Refreshed every `GOOGLE_INTERVAL` seconds (default 300). After three failed
+  refreshes (offline), Health Connect values are used instead.
+
+### Health Connect (fallback)
+
+Used for anything Google Health doesn't return, and for `{mindful}` (today's
+mindfulness minutes). Refreshed every `STATS_INTERVAL` seconds (default 900).
+
+- **Today's totals**: total per data feed (app + device), the feed with the
   highest count wins. Never summed across feeds.
-- **Overnight stats** (resting HR, HRV, SpO₂, respiration, skin temperature)
-  and **sleep**: the most recent night from any source. Sleep sessions ending
-  within 4 h of each other count as the same night. HRV, SpO₂ and respiration
-  only count readings taken during a recorded sleep.
-- `SOURCE_DEFAULT=watch,oura,ultrahuman,*,samsung,phone` and
-  `SOURCE_<GROUP>` only break ties. `*` covers any other app.
-- Overnight stats older than `STAT_MAX_AGE_DAYS` are hidden.
+- **Overnight stats** and **sleep**: the most recent night from any source;
+  sleep sessions ending within 4 h of each other count as the same night. HRV,
+  SpO₂ and respiration only count readings taken during a recorded sleep.
+- Rings (Oura, Ultrahuman) only show up, in either source, if their app writes
+  to Health Connect.
 
-### Not available from Health Connect
+### Not available
 
-Health Connect has no data types for these, so they're never shown (their
-` · ` segment is dropped): `{azm}` (active zone minutes), `{fitness}` (cardio
-fitness level), `{ecg}`, and app-specific scores such as sleep score, stress
-and readiness. Health Connect only records moderate/vigorous activity, so
-`{active}` equals `{active_mv}`.
+`{azm}`, `{fitness}` and `{ecg}` need Google Health. App-specific scores such
+as sleep score, stress and readiness aren't available from either source.
 
-Health → Probe sources lists every record type with the apps and devices that
-wrote it over the last 7 days.
+Health → Current stats shows each value with its source; Probe Health Connect
+lists every record type with the apps and devices that wrote it over the last
+7 days.

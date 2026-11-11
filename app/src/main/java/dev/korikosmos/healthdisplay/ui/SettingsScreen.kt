@@ -55,7 +55,7 @@ private const val PLACEHOLDERS =
     "Placeholders: {bpm} {min} {max} {avg} · {steps} {distance} {calories} {active_kcal} {active} {active_mv} " +
         "{floors} {kcal_in} · {rhr} {hrv} {spo2} {resp} {temp_delta} {vo2max} · {sleep} {sleep_eff} {deep} {rem} " +
         "{light} {awake} · {workout} {workout_time} {weight} {glucose} {glucose_mgdl} · {steps_src} {sleep_src} " +
-        "{rhr_src} {hrv_src}. Not available from Health Connect: {azm} {fitness} {ecg}. " +
+        "{rhr_src} {hrv_src} · {azm} {fitness} {ecg} (Google Health only) · {mindful} (Health Connect only). " +
         "A ' · ' segment is left out when any of its values is missing."
 
 @Composable

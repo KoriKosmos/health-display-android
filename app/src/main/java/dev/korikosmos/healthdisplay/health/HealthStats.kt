@@ -45,7 +45,8 @@ import kotlin.reflect.KClass
  * recorded; SOURCE_* order only breaks ties. Missing or stale stats are simply absent.
  *
  * Not available in Health Connect (no record type): {azm} {fitness} {ecg}. Health Connect
- * only has moderate/vigorous activity minutes, so {active} equals {active_mv}.
+ * only has moderate/vigorous activity minutes, so {active} equals {active_mv}. Google Health
+ * (when signed in) is the main source; these values fill its gaps, plus {mindful}.
  */
 class HealthStats(context: Context, private val config: Config) {
     private val client = HealthConnectClient.getOrCreate(context)
@@ -128,6 +129,11 @@ class HealthStats(context: Context, private val config: Config) {
         step("floors") {
             ranker.pickTotal("FLOORS", today(FloorsClimbedRecord::class, { it.startTime }) { it.floors })
                 ?.let { (_, n) -> v["floors"] = n.roundToInt().toString() }
+        }
+        step("mindful") {
+            ranker.pickTotal("MINDFUL", today(MindfulnessSessionRecord::class, { it.startTime }) {
+                Duration.between(it.startTime, it.endTime).toMinutes().toDouble()
+            })?.let { (_, n) -> v["mindful"] = n.roundToInt().toString() }
         }
         step("kcal_in") {
             ranker.pickTotal("NUTRITION", today(NutritionRecord::class, { it.startTime }) { it.energy?.inKilocalories ?: 0.0 })

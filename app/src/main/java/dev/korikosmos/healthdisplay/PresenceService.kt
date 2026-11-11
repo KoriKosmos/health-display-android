@@ -15,9 +15,14 @@ import androidx.lifecycle.lifecycleScope
 import dev.korikosmos.healthdisplay.config.ConfigStore
 import dev.korikosmos.healthdisplay.discord.DiscordPresence
 import dev.korikosmos.healthdisplay.discord.PresenceActivity
+import dev.korikosmos.healthdisplay.google.GoogleAuth
+import dev.korikosmos.healthdisplay.google.GoogleAuthException
+import dev.korikosmos.healthdisplay.google.GoogleHealthApi
+import dev.korikosmos.healthdisplay.google.GoogleStats
 import dev.korikosmos.healthdisplay.health.HealthStats
 import dev.korikosmos.healthdisplay.presence.ActivityBuilder
 import dev.korikosmos.healthdisplay.presence.Config
+import dev.korikosmos.healthdisplay.presence.StatsMerge
 import dev.korikosmos.healthdisplay.pulsoid.HeartRate
 import dev.korikosmos.healthdisplay.pulsoid.Pulsoid
 import kotlinx.coroutines.CancellationException
@@ -102,12 +107,34 @@ class PresenceService : LifecycleService() {
             }
         }
 
+        var google: Map<String, String> = emptyMap()
+        var googleOkAt = 0L
+        if (cfg.googleOn) {
+            val gs = GoogleStats(GoogleHealthApi { GoogleAuth.token(this@PresenceService) }, cfg)
+            launch {
+                while (true) {
+                    try {
+                        google = gs.refresh(); googleOkAt = System.currentTimeMillis()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: GoogleAuthException) {
+                        AppLog.log("google", e.message ?: "$e"); google = emptyMap()
+                    } catch (e: Exception) {
+                        AppLog.log("google", "$e")
+                    }
+                    // Offline for a while: let Health Connect take over rather than show stale totals.
+                    if (System.currentTimeMillis() - googleOkAt > 3 * cfg.googleInterval * 1000) google = emptyMap()
+                    delay((cfg.googleInterval * 1000).toLong())
+                }
+            }
+        }
+
         try {
             val started = System.currentTimeMillis()
             var lastKey = "init"; var lastPush = 0L
             while (true) {
                 val now = System.currentTimeMillis()
-                val values = stats + hr.values()
+                val values = StatsMerge.merge(google, stats) + hr.values()
                 val act = ActivityBuilder.build(hr.live(now, cfg.staleAfter), hr.bpm, values, cfg, started)
                 val key = ActivityBuilder.key(act)
                 // Re-send unchanged presence every 10 min in case the Discord app restarted.
