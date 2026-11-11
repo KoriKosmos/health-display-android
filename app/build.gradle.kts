@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
     if (discordAar != null) {
         implementation(files(discordAar))
         implementation(libs.androidx.browser) // required by the SDK's Android glue
