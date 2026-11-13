@@ -18,8 +18,8 @@ android {
         applicationId = "dev.korikosmos.healthdisplay"
         minSdk = 31
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.3.1"
+        versionCode = 8
+        versionName = "0.4.0"
         buildConfigField("boolean", "HAS_DISCORD_SDK", hasDiscordSdk.toString())
         ndk { abiFilters += "arm64-v8a" }
     }

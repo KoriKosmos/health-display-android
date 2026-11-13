@@ -29,6 +29,8 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import dev.korikosmos.healthdisplay.AppLog
 import dev.korikosmos.healthdisplay.presence.Config
+import dev.korikosmos.healthdisplay.presence.HrFallback
+import dev.korikosmos.healthdisplay.presence.HrReading
 import kotlinx.coroutines.CancellationException
 import java.time.Duration
 import java.time.Instant
@@ -298,6 +300,20 @@ class HealthStats(context: Context, private val config: Config) {
             }
         }
         append(heartRateProbe())
+    }
+
+    /**
+     * Newest heart-rate sample from any app/device within [maxAgeSec], for the fallback
+     * when Pulsoid isn't live (ties within 60 s go to SOURCE_HR / SOURCE_DEFAULT).
+     */
+    suspend fun recentHeartRate(maxAgeSec: Double): HrReading? {
+        val now = Instant.now()
+        val since = now.minusSeconds(maxAgeSec.toLong())
+        val readings = read(HeartRateRecord::class, since, now).flatMap { r ->
+            val src = feedOf(r).source
+            r.samples.filter { !it.time.isBefore(since) && !it.time.isAfter(now) }.map { HrReading(it.beatsPerMinute, it.time, src) }
+        }
+        return HrFallback.pick(readings, ranker)
     }
 
     /**

@@ -49,12 +49,14 @@ private val FIELDS = listOf(
     Field("UPDATE_INTERVAL", "Min gap between Discord updates (s)", number = true),
     Field("STALE_AFTER", "Clear after no heart rate for (s)", number = true),
     Field("STATS_INTERVAL", "Health Connect refresh (s)", number = true),
+    Field("HR_FALLBACK_MAX_AGE", "Heart-rate fallback: max age (s, 0 = off)", "when Pulsoid isn't live, show a recent watch/ring reading as ~72", number = true),
+    Field("HR_FALLBACK_INTERVAL", "Heart-rate fallback: check every (s)", number = true),
     Field("PUSH_URL", "Server push URL (optional)", "e.g. https://health.korikosmos.dev/push; empty = off"),
     Field("PUSH_TOKEN", "Server push token", "same PUSH_TOKEN as the server's config.env", secret = true),
 )
 
 private const val PLACEHOLDERS =
-    "Placeholders: {bpm} {min} {max} {avg} · {steps} {distance} {calories} {active_kcal} {active} {active_mv} " +
+    "Placeholders: {bpm} {min} {max} {avg} {bpm_age} {bpm_src} · {steps} {distance} {calories} {active_kcal} {active} {active_mv} " +
         "{floors} {kcal_in} · {rhr} {hrv} {spo2} {resp} {temp_delta} {vo2max} · {sleep} {sleep_eff} {deep} {rem} " +
         "{light} {awake} · {workout} {workout_time} {weight} {glucose} {glucose_mgdl} · {steps_src} {sleep_src} " +
         "{rhr_src} {hrv_src} · {azm} {fitness} {ecg} (Google Health only) · {mindful} (Health Connect only). " +

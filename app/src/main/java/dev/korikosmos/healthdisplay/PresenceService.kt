@@ -22,6 +22,8 @@ import dev.korikosmos.healthdisplay.google.GoogleStats
 import dev.korikosmos.healthdisplay.health.HealthStats
 import dev.korikosmos.healthdisplay.presence.ActivityBuilder
 import dev.korikosmos.healthdisplay.presence.Config
+import dev.korikosmos.healthdisplay.presence.HrFallback
+import dev.korikosmos.healthdisplay.presence.HrReading
 import dev.korikosmos.healthdisplay.presence.StatsMerge
 import dev.korikosmos.healthdisplay.pulsoid.HeartRate
 import dev.korikosmos.healthdisplay.pulsoid.Pulsoid
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -93,8 +96,24 @@ class PresenceService : LifecycleService() {
         val pulsoid = Pulsoid(token, cfg.pollInterval) { bpm, ms -> hr.add(bpm, ms) }
         pulsoid.start(this)
         var stats: Map<String, String> = emptyMap()
+        var fallback: HrReading? = null
         if (HealthConnectClient.getSdkStatus(this@PresenceService) == HealthConnectClient.SDK_AVAILABLE) {
             val hs = HealthStats(this@PresenceService, cfg)
+            // Heart-rate fallback: only looked up while Pulsoid isn't live.
+            if (cfg.hrFallbackMaxAge > 0) launch {
+                while (true) {
+                    if (!hr.live(System.currentTimeMillis(), cfg.staleAfter)) {
+                        try {
+                            fallback = hs.recentHeartRate(cfg.hrFallbackMaxAge)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            AppLog.log("health", "heart rate: $e")
+                        }
+                    }
+                    delay((cfg.hrFallbackInterval * 1000).toLong())
+                }
+            }
             launch {
                 while (true) {
                     try {
@@ -138,10 +157,25 @@ class PresenceService : LifecycleService() {
         try {
             val started = System.currentTimeMillis()
             var lastKey = "init"; var lastPush = 0L
+            var lastMode: String? = "init"
             while (true) {
                 val now = System.currentTimeMillis()
-                val values = StatsMerge.merge(google, stats) + hr.values()
-                val act = ActivityBuilder.build(hr.bpm?.toString()?.takeIf { hr.live(now, cfg.staleAfter) }, values, cfg, started)
+                val live = hr.live(now, cfg.staleAfter)
+                // No live Pulsoid reading: a recent sample from any device, shown as "~72".
+                val fb = if (live) null else HrFallback.usable(fallback, Instant.ofEpochMilli(now), cfg)
+                val mode = if (live) "live" else fb?.source
+                if (mode != lastMode) {
+                    AppLog.log("heart rate", when {
+                        live -> "live from Pulsoid"
+                        fb != null -> "no live reading; showing ~${fb.bpm} from ${fb.source}"
+                        else -> "no live or recent reading"
+                    })
+                    lastMode = mode
+                }
+                val values = StatsMerge.merge(google, stats) + hr.values() +
+                    (fb?.let { HrFallback.values(it, Instant.ofEpochMilli(now)) } ?: emptyMap())
+                val bpmText = if (live) hr.bpm?.toString() else fb?.let { "~${it.bpm}" }
+                val act = ActivityBuilder.build(bpmText, values, cfg, started)
                 val key = ActivityBuilder.key(act)
                 // Re-send unchanged presence every 10 min in case the Discord app restarted.
                 val refresh = act != null && now - lastPush >= REFRESH_MS
@@ -155,10 +189,12 @@ class PresenceService : LifecycleService() {
                     _status.update { it.copy(lastPush = "${LocalTime.now().format(TIME)} $text") }
                 }
                 // Server push: every UPDATE_INTERVAL as a heartbeat, and at once when live changes.
-                val live = act != null
-                if (push != null && (now - lastServerPush >= cfg.updateInterval * 1000 || live != lastServerLive)) {
-                    lastServerPush = now; lastServerLive = live
-                    val payload = ServerPush.payload(live, hr.measuredMs, values, now)
+                // "live" for the server = presence shown (Pulsoid, or the fallback reading).
+                val shown = act != null
+                if (push != null && (now - lastServerPush >= cfg.updateInterval * 1000 || shown != lastServerLive)) {
+                    lastServerPush = now; lastServerLive = shown
+                    val measured = if (live) hr.measuredMs else fb?.time?.toEpochMilli() ?: hr.measuredMs
+                    val payload = ServerPush.payload(shown, measured, values, now)
                     launch {
                         val err = push.send(payload)
                         val text = "${LocalTime.now().format(TIME)} " + (err?.let { "failed: $it" } ?: "ok")
