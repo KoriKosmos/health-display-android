@@ -49,6 +49,8 @@ private val FIELDS = listOf(
     Field("UPDATE_INTERVAL", "Min gap between Discord updates (s)", number = true),
     Field("STALE_AFTER", "Clear after no heart rate for (s)", number = true),
     Field("STATS_INTERVAL", "Health Connect refresh (s)", number = true),
+    Field("PUSH_URL", "Server push URL (optional)", "e.g. https://health.korikosmos.dev/push; empty = off"),
+    Field("PUSH_TOKEN", "Server push token", "same PUSH_TOKEN as the server's config.env", secret = true),
 )
 
 private const val PLACEHOLDERS =

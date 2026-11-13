@@ -25,6 +25,7 @@ import dev.korikosmos.healthdisplay.presence.Config
 import dev.korikosmos.healthdisplay.presence.StatsMerge
 import dev.korikosmos.healthdisplay.pulsoid.HeartRate
 import dev.korikosmos.healthdisplay.pulsoid.Pulsoid
+import dev.korikosmos.healthdisplay.push.ServerPush
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -46,6 +47,7 @@ data class Status(
     val presence: PresenceActivity? = null,
     val lastPush: String = "",
     val pulsoid: String = "",
+    val server: String = "",
 )
 
 /**
@@ -129,6 +131,10 @@ class PresenceService : LifecycleService() {
             }
         }
 
+        val push = cfg["PUSH_URL"].takeIf { it.isNotBlank() && cfg["PUSH_TOKEN"].isNotBlank() }
+            ?.let { ServerPush(it, cfg["PUSH_TOKEN"]) }
+        var lastServerPush = 0L; var lastServerLive: Boolean? = null
+
         try {
             val started = System.currentTimeMillis()
             var lastKey = "init"; var lastPush = 0L
@@ -147,6 +153,17 @@ class PresenceService : LifecycleService() {
                     lastKey = key; lastPush = now
                     updateNotification(text)
                     _status.update { it.copy(lastPush = "${LocalTime.now().format(TIME)} $text") }
+                }
+                // Server push: every UPDATE_INTERVAL as a heartbeat, and at once when live changes.
+                val live = act != null
+                if (push != null && (now - lastServerPush >= cfg.updateInterval * 1000 || live != lastServerLive)) {
+                    lastServerPush = now; lastServerLive = live
+                    val payload = ServerPush.payload(live, hr.measuredMs, values, now)
+                    launch {
+                        val err = push.send(payload)
+                        val text = "${LocalTime.now().format(TIME)} " + (err?.let { "failed: $it" } ?: "ok")
+                        _status.update { it.copy(server = text) }
+                    }
                 }
                 _status.update {
                     it.copy(

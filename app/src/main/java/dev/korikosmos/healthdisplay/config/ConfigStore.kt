@@ -61,7 +61,7 @@ class ConfigStore(private val context: Context) {
     companion object {
         private const val ENC = "__enc"
         private val RUNNING = booleanPreferencesKey("__running")
-        val SECRETS = setOf("PULSOID_TOKEN")
+        val SECRETS = setOf("PULSOID_TOKEN", "PUSH_TOKEN")
         // The phone signs in to Google through Play services, and uses GOOGLE_TOTALS instead of
         // the server's per-feed totals + ROLLUP_SOURCES.
         private val SERVER_ONLY = setOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ROLLUP_SOURCES")

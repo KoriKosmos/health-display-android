@@ -45,6 +45,7 @@ fun StatusScreen() {
                 Text(DiscordPresence.discordAppStatus(ctx), style = MaterialTheme.typography.bodySmall)
                 if (status.pulsoid.isNotEmpty()) Text("Pulsoid: ${status.pulsoid}")
                 if (status.lastPush.isNotEmpty()) Text("Last push: ${status.lastPush}")
+                if (status.server.isNotEmpty()) Text("Server: ${status.server}")
             }
         }
         status.presence?.let { p ->

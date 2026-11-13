@@ -43,6 +43,9 @@ data class Config(val values: Map<String, String> = emptyMap()) {
             "GOOGLE_HEALTH" to "off",
             "GOOGLE_INTERVAL" to "300",
             "GOOGLE_TOTALS" to "all-sources",
+            // Send the phone's values to the Health Display server (docs/server-push.md);
+            // off while PUSH_URL is empty. Same keys in the server's config.env.
+            "PUSH_URL" to "", "PUSH_TOKEN" to "",
         )
 
         /** Parse KEY=VALUE lines like the server does (comments and blank lines skipped). */
