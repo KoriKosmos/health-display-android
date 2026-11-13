@@ -11,8 +11,9 @@ layout, placeholders and config.env keys.
   `0` = off; checked every `HR_FALLBACK_INTERVAL`, default 60) is shown as
   `{bpm}` = `~72` with `{bpm_age}` ("8 min ago") and `{bpm_src}`. Newest wins;
   `SOURCE_HR` (else `SOURCE_DEFAULT`) breaks ties within 60 s. Only apps that
-  write heart rate to Health Connect count (Ultrahuman, Oura with daytime heart
-  rate on; the Google Health app doesn't export the Pixel Watch's).
+  write heart rate to Health Connect count (e.g. Ultrahuman, or Oura with
+  daytime heart rate on). Health → Probe Health Connect shows which apps write
+  heart rate and how often.
 - **Daily stats:** Google Health API (main source, same numbers as the Google
   Health app), with Health Connect filling the gaps and providing stats Google
   doesn't have ({mindful})
