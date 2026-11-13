@@ -4,9 +4,12 @@ import dev.korikosmos.healthdisplay.discord.PresenceActivity
 
 /** Builds the Discord activity exactly like the server's build_activity(). */
 object ActivityBuilder {
-    /** Null when there is no live heart rate: presence is cleared. */
-    fun build(live: Boolean, bpm: Int?, values: Map<String, String>, config: Config, startedMs: Long): PresenceActivity? {
-        if (!live || bpm == null) return null
+    /**
+     * [bpm] is the text for the BPM tile: the live Pulsoid value, "~72" for a fallback
+     * reading, or null when there is neither (presence is cleared).
+     */
+    fun build(bpm: String?, values: Map<String, String>, config: Config, startedMs: Long): PresenceActivity? {
+        if (bpm.isNullOrEmpty()) return null
         val image = config.imageOn
         return PresenceActivity(
             details = Template.render(config["DETAILS"], values),
@@ -17,8 +20,8 @@ object ActivityBuilder {
         )
     }
 
-    fun tileUrl(config: Config, bpm: Int): String {
-        val text = quote(config["IMG_TEXT"].replace("{bpm}", bpm.toString()))
+    fun tileUrl(config: Config, bpm: String): String {
+        val text = quote(config["IMG_TEXT"].replace("{bpm}", bpm))
         return "https://placehold.co/512x512/${config["IMG_BG"]}/${config["IMG_FG"]}/png?text=$text&font=montserrat"
     }
 

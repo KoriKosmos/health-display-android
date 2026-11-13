@@ -15,6 +15,8 @@ data class Config(val values: Map<String, String> = emptyMap()) {
     val statsInterval get() = double("STATS_INTERVAL")
     val statMaxAgeDays get() = double("STAT_MAX_AGE_DAYS")
     val googleInterval get() = double("GOOGLE_INTERVAL")
+    val hrFallbackMaxAge get() = double("HR_FALLBACK_MAX_AGE")
+    val hrFallbackInterval get() = double("HR_FALLBACK_INTERVAL")
     val googleOn get() = this["GOOGLE_HEALTH"].equals("on", ignoreCase = true)
     val imageOn get() = !this["IMAGE"].equals("off", ignoreCase = true)
 
@@ -28,13 +30,16 @@ data class Config(val values: Map<String, String> = emptyMap()) {
     companion object {
         val DEFAULTS = mapOf(
             "PULSOID_TOKEN" to "", "DISCORD_APP_ID" to "",
-            "DETAILS" to "❤️ {bpm} bpm · RHR {rhr} · HRV {hrv}ms",
+            "DETAILS" to "❤️ {bpm} bpm · {bpm_age} · RHR {rhr} · HRV {hrv}ms",
             "STATE" to "👟 {steps} · ⏱ {active} min active · 😴 {sleep}",
             "IMG_HOVER" to "min {min} · avg {avg} · max {max}",
             "SOURCE_DEFAULT" to "watch,oura,ultrahuman,*,samsung,phone",
             "STAT_MAX_AGE_DAYS" to "1.5",
             "IMAGE" to "on", "IMG_TEXT" to "{bpm}", "IMG_BG" to "ED4245", "IMG_FG" to "FFFFFF",
             "POLL_INTERVAL" to "3", "UPDATE_INTERVAL" to "15", "STALE_AFTER" to "60",
+            // Heart-rate fallback when Pulsoid isn't live: max age of a Health Connect sample to
+            // show as "~72" (0 = off), and how often to look (s).
+            "HR_FALLBACK_MAX_AGE" to "900", "HR_FALLBACK_INTERVAL" to "60",
             // Phone-only: how often Health Connect is read.
             "STATS_INTERVAL" to "900",
             // Google Health API: main source when signed in (on/off), refresh interval (s), and

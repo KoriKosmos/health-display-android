@@ -141,7 +141,7 @@ class PresenceService : LifecycleService() {
             while (true) {
                 val now = System.currentTimeMillis()
                 val values = StatsMerge.merge(google, stats) + hr.values()
-                val act = ActivityBuilder.build(hr.live(now, cfg.staleAfter), hr.bpm, values, cfg, started)
+                val act = ActivityBuilder.build(hr.bpm?.toString()?.takeIf { hr.live(now, cfg.staleAfter) }, values, cfg, started)
                 val key = ActivityBuilder.key(act)
                 // Re-send unchanged presence every 10 min in case the Discord app restarted.
                 val refresh = act != null && now - lastPush >= REFRESH_MS
