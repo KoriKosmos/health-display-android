@@ -5,7 +5,14 @@ Presence, straight from the phone. Android counterpart of
 [Health Display](https://github.com/KoriKosmos/health-display); same presence
 layout, placeholders and config.env keys.
 
-- **Live BPM:** Pulsoid real-time WebSocket (REST polling while it's down)
+- **Live BPM:** Pulsoid real-time WebSocket (REST polling while it's down).
+  When Pulsoid has no live reading, the newest Health Connect heart-rate sample
+  from any device (at most `HR_FALLBACK_MAX_AGE` seconds old, default 900;
+  `0` = off; checked every `HR_FALLBACK_INTERVAL`, default 60) is shown as
+  `{bpm}` = `~72` with `{bpm_age}` ("8 min ago") and `{bpm_src}`. Newest wins;
+  `SOURCE_HR` (else `SOURCE_DEFAULT`) breaks ties within 60 s. Only apps that
+  write heart rate to Health Connect count (Ultrahuman, Oura with daytime heart
+  rate on; the Google Health app doesn't export the Pixel Watch's).
 - **Daily stats:** Google Health API (main source, same numbers as the Google
   Health app), with Health Connect filling the gaps and providing stats Google
   doesn't have ({mindful})

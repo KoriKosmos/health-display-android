@@ -57,12 +57,15 @@ Add these keys, commented, to `config.env.example`.
 
 - `sent_at`: the phone's clock when sent, Unix ms. For logging only; use the
   server's receive time for staleness, since the clocks may differ.
-- `live`: whether the phone has a live heart rate. `false` means the phone
-  cleared its own presence.
-- `measured_at`: Unix ms of the phone's latest BPM reading (0 if none yet).
+- `live`: whether the phone is showing a presence: a live Pulsoid reading, or
+  its heart-rate fallback (a recent watch/ring sample, `{bpm}` = `"~72"`).
+  `false` means the phone cleared its own presence.
+- `measured_at`: Unix ms of the BPM reading being shown: the latest Pulsoid
+  reading, or the fallback sample's time (0 if none yet).
 - `values`: placeholder name → display string, already formatted. These are
   the same names as the server's placeholders, plus the phone-only
-  `{mindful}`. Missing keys simply have no value, so their ` · ` segments drop
+  `{mindful}`. While the fallback is shown, `bpm` is `"~72"` and `bpm_age` /
+  `bpm_src` are set, as on the server. Missing keys simply have no value, so their ` · ` segments drop
   out as usual.
 
 The phone sends a push every `UPDATE_INTERVAL` seconds (default 15) as a
