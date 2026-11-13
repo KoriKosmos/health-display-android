@@ -9,6 +9,7 @@ import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.FloorsClimbedRecord
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.MindfulnessSessionRecord
 import androidx.health.connect.client.records.NutritionRecord
@@ -296,9 +297,46 @@ class HealthStats(context: Context, private val config: Config) {
                 append("$e\n")
             }
         }
+        append(heartRateProbe())
+    }
+
+    /**
+     * Who writes heart rate, and how often: samples per app/device over the last 24 h, the
+     * typical (median) gap between samples, and the newest sample. Kept to 24 h because
+     * watches write thousands of samples a day.
+     */
+    suspend fun heartRateProbe(): String = buildString {
+        val now = Instant.now()
+        val local = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss").withZone(zone)
+        append("== HeartRateRecord, last 24 h: ")
+        try {
+            val rs = read(HeartRateRecord::class, now.minus(Duration.ofDays(1)), now)
+            val samples = rs.flatMap { r -> r.samples.map { feedOf(r) to it } }
+            if (samples.isEmpty()) { append("none\n"); return@buildString }
+            append("${samples.size} samples in ${rs.size} records\n")
+            samples.groupBy({ it.first }, { it.second }).entries.sortedByDescending { it.value.size }.forEach { (f, xs) ->
+                val times = xs.map { it.time }.sorted()
+                val gaps = times.zipWithNext { a, b -> Duration.between(a, b).seconds }.filter { it > 0 }.sorted()
+                val median = gaps.getOrNull(gaps.size / 2)
+                val newest = xs.maxBy { it.time }
+                append(
+                    "   ${f.source} [${f.pkg}${if (f.device.isNotEmpty()) " · ${f.device}" else ""}]: ${xs.size} samples, " +
+                        "typical gap ${median?.let(::gap) ?: "-"}, newest ${newest.beatsPerMinute} bpm at ${local.format(newest.time)} " +
+                        "(${Duration.between(newest.time, now).toMinutes()} min ago)\n",
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SecurityException) {
+            append("no permission\n")
+        } catch (e: Exception) {
+            append("$e\n")
+        }
     }
 
     companion object {
+        private fun gap(s: Long) = if (s < 120) "${s}s" else "${s / 60} min"
+
         private val ASLEEP = setOf(
             SleepSessionRecord.STAGE_TYPE_DEEP, SleepSessionRecord.STAGE_TYPE_REM,
             SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING,
@@ -313,9 +351,9 @@ class HealthStats(context: Context, private val config: Config) {
             WeightRecord::class, BloodGlucoseRecord::class, MindfulnessSessionRecord::class,
         )
 
-        /** Read permissions requested: every probed type plus background reading. */
+        /** Read permissions requested: every probed type, heart rate, and background reading. */
         val PERMISSIONS: Set<String> =
-            PROBE_TYPES.map { HealthPermission.getReadPermission(it) }.toSet() +
+            (PROBE_TYPES + HeartRateRecord::class).map { HealthPermission.getReadPermission(it) }.toSet() +
                 HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
 
         /** End time of an interval record, or the time of an instantaneous one (their interfaces are internal). */
