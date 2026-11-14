@@ -95,8 +95,13 @@ mindfulness minutes). Refreshed every `STATS_INTERVAL` seconds (default 900).
 
 ### Not available
 
-`{azm}`, `{fitness}` and `{ecg}` need Google Health. App-specific scores such
-as sleep score, stress and readiness aren't available from either source.
+`{azm}`, `{fitness}` and `{ecg}` need Google Health. App-specific scores aren't
+in Google Health or Health Connect, so the server-only placeholders from the
+Oura and Ultrahuman APIs never have a value on the phone (their ` · `
+segments drop out): `{sleep_score}` `{readiness}` `{stress}` `{stress_high}`
+`{recovery_high}` `{resilience}` `{activity_score}` (Oura), `{recovery}`
+`{movement}` (Ultrahuman). With server push on, the server still shows them
+whenever the phone has nothing live to show.
 
 Health → Current stats shows each value with its source; Probe Health Connect
 lists every record type with the apps and devices that wrote it over the last
