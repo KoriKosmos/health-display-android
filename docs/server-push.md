@@ -83,8 +83,10 @@ heartbeat, and immediately when `live` changes.
    `PUSH_STALE_AFTER` seconds ago (server clock).
 3. While the phone is active **and its latest push has `live` true**,
    `build_activity` uses the phone's data instead of `hr`/`stats`:
-   `values = payload["values"]`, rendered with the server's own `DETAILS` /
-   `STATE` / `IMG_HOVER` templates. The BPM tile uses `values["bpm"]`, and
+   `values = {**own_stats, **payload["values"]}`, so the phone wins on
+   conflicts and server-only values (e.g. Oura/Ultrahuman scores) stay
+   visible (server commit da2cdd3). They're rendered with the server's own
+   `DETAILS` / `STATE` / `IMG_HOVER` templates. The BPM tile uses `values["bpm"]`, and
    `timestamps.start` stays the server's own start.
 4. Otherwise (phone inactive, or active with `live` false), behaviour is
    unchanged: the server shows what its own sources have. A phone with no live
