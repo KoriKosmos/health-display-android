@@ -1,29 +1,28 @@
 # Server push: phone values → Health Display server
 
-While the Android app's presence service runs, it sends its current values to
-the [Health Display server](https://github.com/KoriKosmos/health-display).
-While the phone is showing a presence (`live` true), the server shows **the
-phone's values** in its own Rich Presence, so both show identical numbers.
-Otherwise, when the phone has nothing to show or the pushes stop, the server
-uses its own sources (Pulsoid, Google Health, Oura/Ultrahuman APIs, its own
-heart-rate fallback).
+The [Health Display server](https://github.com/KoriKosmos/health-display) is
+always on and owns the Discord Rich Presence. The Android app doesn't set a
+presence itself. It collects the phone's data and sends it to the server:
+live Pulsoid heart rate, the heart-rate fallback, and Google Health / Health
+Connect stats.
 
-Both sides are implemented: the phone in `push/ServerPush.kt`, the server in
-`health_display.py` (server commits 3dbe4d5, b925423).
+Both sides are implemented: the phone in `push/ServerPush.kt` and
+`PushService.kt`, the server in `health_display.py` (server commits 3dbe4d5,
+b925423, da2cdd3, 751ac20).
 
 ## Configuration
 
 Both apps read the same `config.env`, so importing the server's file on the
-phone sets the phone up too.
+phone sets the phone up too. The phone ignores the presence keys in that file
+(`DISCORD_APP_ID`, `DETAILS`, `STATE`, `IMG_*`).
 
 | Key | Used by | Meaning |
 |---|---|---|
 | `PUSH_TOKEN` | both | Shared secret. Generate with `openssl rand -hex 32`. Push is off on both sides while empty. |
-| `PUSH_URL` | phone | Where the phone posts, e.g. `https://health.korikosmos.dev/push`. Push is off on the phone while empty. |
+| `PUSH_URL` | phone | Where the phone posts, e.g. `https://health.korikosmos.dev/push`. Without it (or the token) the phone has nothing to do. |
 | `PUSH_PORT` | server | Port the server listens on, default `8766`. |
 | `PUSH_STALE_AFTER` | server | Seconds without a valid push before the phone counts as inactive, default `60`. |
-
-Add these keys, commented, to `config.env.example`.
+| `UPDATE_INTERVAL` | phone | Seconds between pushes, default `15`. |
 
 ## Endpoint
 
@@ -59,20 +58,22 @@ Add these keys, commented, to `config.env.example`.
 
 - `sent_at`: the phone's clock when sent, Unix ms. For logging only; use the
   server's receive time for staleness, since the clocks may differ.
-- `live`: whether the phone is showing a presence: a live Pulsoid reading, or
-  its heart-rate fallback (a recent watch/ring sample, `{bpm}` = `"~72"`).
-  `false` means the phone has nothing to show (it cleared its own presence);
-  the server then uses its own sources rather than clearing.
-- `measured_at`: Unix ms of the BPM reading being shown: the latest Pulsoid
+- `live`: whether the phone has a heart rate worth showing. That's either a
+  live Pulsoid reading, or the phone's heart-rate fallback: a recent
+  watch/ring sample from Health Connect, sent as `{bpm}` = `"~72"`.
+- `measured_at`: Unix ms of that heart-rate reading: the latest Pulsoid
   reading, or the fallback sample's time (0 if none yet).
-- `values`: placeholder name → display string, already formatted. These are
-  the same names as the server's placeholders, plus the phone-only
-  `{mindful}`. While the fallback is shown, `bpm` is `"~72"` and `bpm_age` /
-  `bpm_src` are set, as on the server. Missing keys simply have no value, so
-  their ` · ` segments drop out as usual.
+- `values`: placeholder name → display string, already formatted.
+  - The names are the same as the server's placeholders, plus the phone-only
+    `{mindful}`.
+  - While the fallback is sent, `bpm` is `"~72"` and `bpm_age` / `bpm_src` are
+    set, as on the server.
+  - Missing keys simply have no value, so their ` · ` segments drop out as
+    usual.
 
-The phone sends a push every `UPDATE_INTERVAL` seconds (default 15) as a
-heartbeat, and immediately when `live` changes.
+The phone pushes every `UPDATE_INTERVAL` seconds whether or not it's live; the
+pushes double as the "phone is active" heartbeat. It also pushes immediately
+when `live` changes.
 
 ## Server behaviour
 
@@ -81,28 +82,30 @@ heartbeat, and immediately when `live` changes.
    latest valid payload and its receive time under a lock.
 2. The phone is **active** while the last valid push arrived less than
    `PUSH_STALE_AFTER` seconds ago (server clock).
-3. While the phone is active **and its latest push has `live` true**,
-   `build_activity` uses the phone's data instead of `hr`/`stats`:
-   `values = {**own_stats, **payload["values"]}`, so the phone wins on
-   conflicts and server-only values (e.g. Oura/Ultrahuman scores) stay
-   visible (server commit da2cdd3). They're rendered with the server's own
-   `DETAILS` / `STATE` / `IMG_HOVER` templates. The BPM tile uses `values["bpm"]`, and
-   `timestamps.start` stays the server's own start.
-4. Otherwise (phone inactive, or active with `live` false), behaviour is
-   unchanged: the server shows what its own sources have. A phone with no live
-   heart rate (e.g. watch left at home) must not hide the server's ring data
-   (changed in server commit b925423; it used to clear the presence).
-5. Keep polling Pulsoid and Google Health meanwhile, so falling back is
-   instant.
-6. `UPDATE_INTERVAL` and the unchanged-presence check apply as now.
-7. Log transitions once: `phone: active (pushes from <ip>)` and
+3. Active phone, `live` true: `values = {**own_stats, **payload["values"]}`.
+   The phone wins on conflicts, and server-only values (e.g. Oura/Ultrahuman
+   scores) stay visible (server commit da2cdd3). The BPM tile uses
+   `values["bpm"]`.
+4. Active phone, `live` false: the phone's values are still a data source and
+   win over the server's own stats. Only its heart-rate keys (`bpm` `min`
+   `avg` `max` `bpm_age` `bpm_src`) are dropped, so the server's own Pulsoid
+   and heart-rate fallback decide the heart rate (server commit 751ac20).
+5. Inactive phone (no push for `PUSH_STALE_AFTER`): the server uses only its
+   own sources (Pulsoid, Google Health, Oura/Ultrahuman APIs, its heart-rate
+   fallback).
+6. All values are rendered with the server's own `DETAILS` / `STATE` /
+   `IMG_HOVER` templates, and `timestamps.start` is the server's own start.
+   `UPDATE_INTERVAL` and the unchanged-presence check apply as usual.
+7. The server keeps polling its own sources while the phone is active, so
+   falling back is instant.
+8. Log transitions once: `phone: active (pushes from <ip>)` and
    `phone: inactive, using own sources`. Log rejected pushes once per cause.
 
 ## Deployment
 
 - `compose.yaml`: publish the port, `"8766:8766"`.
 - Public URL: `https://health.korikosmos.dev/push`. Cloudflare-proxied CNAME →
-  Nginx Proxy Manager → `192.168.0.57:8766`.
+  Nginx Proxy Manager (host 24) → `192.168.0.57:8766`.
 
 ## Test
 
@@ -111,5 +114,5 @@ curl -i -X POST https://health.korikosmos.dev/push \
   -H "Authorization: Bearer $PUSH_TOKEN" -H 'Content-Type: application/json' \
   -d '{"v":1,"sent_at":0,"live":true,"measured_at":0,"values":{"bpm":"77","steps":"1,234"}}'
 # expect 204; the server's presence shows 77 bpm / 1,234 steps for PUSH_STALE_AFTER seconds
-# (with "live":false the server keeps showing its own sources)
+# (with "live":false, 1,234 steps still shows, but the heart rate comes from the server's own sources)
 ```
