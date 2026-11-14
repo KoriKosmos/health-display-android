@@ -13,14 +13,11 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import dev.korikosmos.healthdisplay.config.ConfigStore
-import dev.korikosmos.healthdisplay.discord.DiscordPresence
-import dev.korikosmos.healthdisplay.discord.PresenceActivity
 import dev.korikosmos.healthdisplay.google.GoogleAuth
 import dev.korikosmos.healthdisplay.google.GoogleAuthException
 import dev.korikosmos.healthdisplay.google.GoogleHealthApi
 import dev.korikosmos.healthdisplay.google.GoogleStats
 import dev.korikosmos.healthdisplay.health.HealthStats
-import dev.korikosmos.healthdisplay.presence.ActivityBuilder
 import dev.korikosmos.healthdisplay.presence.Config
 import dev.korikosmos.healthdisplay.presence.HrFallback
 import dev.korikosmos.healthdisplay.presence.HrReading
@@ -47,58 +44,59 @@ data class Status(
     val running: Boolean = false,
     val problem: String = "",
     val values: Map<String, String> = emptyMap(),
-    val presence: PresenceActivity? = null,
-    val lastPush: String = "",
+    val heartRate: String = "",
     val pulsoid: String = "",
     val server: String = "",
 )
 
 /**
- * Long-running foreground service (type specialUse) that owns the presence loop, ported
- * from the server's main(): Pulsoid readings in, Discord presence pushed at most every
- * UPDATE_INTERVAL when it changed, cleared after STALE_AFTER without data. Health Connect
- * stats are refreshed every STATS_INTERVAL. The loop restarts when settings change.
+ * Long-running foreground service (type specialUse) that collects the phone's data and
+ * sends it to the Health Display server, which owns the Discord presence
+ * (docs/server-push.md). Pulsoid heart rate (live), Health Connect / Google Health stats
+ * and the heart-rate fallback are merged into placeholder values and pushed every
+ * UPDATE_INTERVAL, and at once when "live" changes. The loop restarts when settings change.
  */
-class PresenceService : LifecycleService() {
+class PushService : LifecycleService() {
     private var loop: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_STOP) {
-            lifecycleScope.launch { ConfigStore(this@PresenceService).setRunning(false); stopSelf() }
+            lifecycleScope.launch { ConfigStore(this@PushService).setRunning(false); stopSelf() }
             return START_NOT_STICKY
         }
         ServiceCompat.startForeground(
             this, NOTIFICATION_ID, notification("Starting…"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
-        val test = intent?.action == ACTION_TEST
-        if (!test) lifecycleScope.launch { ConfigStore(this@PresenceService).setRunning(true) }
+        lifecycleScope.launch { ConfigStore(this@PushService).setRunning(true) }
         loop?.cancel()
         loop = lifecycleScope.launch {
-            if (test) testLoop()
-            else ConfigStore(this@PresenceService).config.distinctUntilChanged().collectLatest { run(it) }
+            ConfigStore(this@PushService).config.distinctUntilChanged().collectLatest { run(it) }
         }
         _status.update { it.copy(running = true) }
         return START_STICKY
     }
 
     private suspend fun run(cfg: Config) = coroutineScope {
-        val token = cfg["PULSOID_TOKEN"]
-        val appId = cfg["DISCORD_APP_ID"].toLongOrNull()
-        if (token.isEmpty() || appId == null) {
-            problem("Set the Pulsoid token and Discord application ID in Settings"); return@coroutineScope
+        val url = cfg["PUSH_URL"]; val pushToken = cfg["PUSH_TOKEN"]
+        if (url.isBlank() || pushToken.isBlank()) {
+            problem("Nothing to do: set the server push URL and token in Settings (or import the server's config.env)")
+            return@coroutineScope
         }
         _status.update { it.copy(problem = "") }
-        DiscordPresence.start(this@PresenceService, appId)
+        val push = ServerPush(url, pushToken)
 
         val hr = HeartRate()
-        val pulsoid = Pulsoid(token, cfg.pollInterval) { bpm, ms -> hr.add(bpm, ms) }
-        pulsoid.start(this)
+        val pulsoid = cfg["PULSOID_TOKEN"].takeIf { it.isNotBlank() }
+            ?.let { Pulsoid(it, cfg.pollInterval) { bpm, ms -> hr.add(bpm, ms) } }
+        if (pulsoid == null) AppLog.log("pulsoid", "no token set: pushing stats without live heart rate")
+        pulsoid?.start(this)
+
         var stats: Map<String, String> = emptyMap()
         var fallback: HrReading? = null
-        if (HealthConnectClient.getSdkStatus(this@PresenceService) == HealthConnectClient.SDK_AVAILABLE) {
-            val hs = HealthStats(this@PresenceService, cfg)
+        if (HealthConnectClient.getSdkStatus(this@PushService) == HealthConnectClient.SDK_AVAILABLE) {
+            val hs = HealthStats(this@PushService, cfg)
             // Heart-rate fallback: only looked up while Pulsoid isn't live.
             if (cfg.hrFallbackMaxAge > 0) launch {
                 while (true) {
@@ -131,7 +129,7 @@ class PresenceService : LifecycleService() {
         var google: Map<String, String> = emptyMap()
         var googleOkAt = 0L
         if (cfg.googleOn) {
-            val gs = GoogleStats(GoogleHealthApi { GoogleAuth.token(this@PresenceService) }, cfg)
+            val gs = GoogleStats(GoogleHealthApi { GoogleAuth.token(this@PushService) }, cfg)
             launch {
                 while (true) {
                     try {
@@ -143,97 +141,58 @@ class PresenceService : LifecycleService() {
                     } catch (e: Exception) {
                         AppLog.log("google", "$e")
                     }
-                    // Offline for a while: let Health Connect take over rather than show stale totals.
+                    // Offline for a while: let Health Connect take over rather than send stale totals.
                     if (System.currentTimeMillis() - googleOkAt > 3 * cfg.googleInterval * 1000) google = emptyMap()
                     delay((cfg.googleInterval * 1000).toLong())
                 }
             }
         }
 
-        val push = cfg["PUSH_URL"].takeIf { it.isNotBlank() && cfg["PUSH_TOKEN"].isNotBlank() }
-            ?.let { ServerPush(it, cfg["PUSH_TOKEN"]) }
-        var lastServerPush = 0L; var lastServerLive: Boolean? = null
-
         try {
-            val started = System.currentTimeMillis()
-            var lastKey = "init"; var lastPush = 0L
+            var lastPush = 0L; var lastLive: Boolean? = null
             var lastMode: String? = "init"
             while (true) {
                 val now = System.currentTimeMillis()
                 val live = hr.live(now, cfg.staleAfter)
-                // No live Pulsoid reading: a recent sample from any device, shown as "~72".
+                // No live Pulsoid reading: a recent sample from any device, sent as "~72".
                 val fb = if (live) null else HrFallback.usable(fallback, Instant.ofEpochMilli(now), cfg)
                 val mode = if (live) "live" else fb?.source
-                if (mode != lastMode) {
-                    AppLog.log("heart rate", when {
-                        live -> "live from Pulsoid"
-                        fb != null -> "no live reading; showing ~${fb.bpm} from ${fb.source}"
-                        else -> "no live or recent reading"
-                    })
-                    lastMode = mode
+                val hrText = when {
+                    live -> "live from Pulsoid"
+                    fb != null -> "no live reading; sending ~${fb.bpm} from ${fb.source}"
+                    else -> "no live or recent reading"
                 }
+                if (mode != lastMode) { AppLog.log("heart rate", hrText); lastMode = mode }
                 val values = StatsMerge.merge(google, stats) + hr.values() +
                     (fb?.let { HrFallback.values(it, Instant.ofEpochMilli(now)) } ?: emptyMap())
-                val bpmText = if (live) hr.bpm?.toString() else fb?.let { "~${it.bpm}" }
-                val act = ActivityBuilder.build(bpmText, values, cfg, started)
-                val key = ActivityBuilder.key(act)
-                // Re-send unchanged presence every 10 min in case the Discord app restarted.
-                val refresh = act != null && now - lastPush >= REFRESH_MS
-                if ((key != lastKey && (now - lastPush >= cfg.updateInterval * 1000 || lastKey == "init" || act == null)) || refresh) {
-                    if (act == null) DiscordPresence.clear() else DiscordPresence.update(act)
-                    val text = act?.let { listOf(it.details, it.state).filter(String::isNotEmpty).joinToString(" | ") }
-                        ?: "cleared (no live heart rate)"
-                    AppLog.log("presence", text)
-                    lastKey = key; lastPush = now
-                    updateNotification(text)
-                    _status.update { it.copy(lastPush = "${LocalTime.now().format(TIME)} $text") }
-                }
-                // Server push: every UPDATE_INTERVAL as a heartbeat, and at once when live changes.
-                // "live" for the server = presence shown (Pulsoid, or the fallback reading).
-                val shown = act != null
-                if (push != null && (now - lastServerPush >= cfg.updateInterval * 1000 || shown != lastServerLive)) {
-                    lastServerPush = now; lastServerLive = shown
+
+                // "live" = a heart rate worth showing: live Pulsoid, or the fallback reading.
+                val shown = live || fb != null
+                if (now - lastPush >= cfg.updateInterval * 1000 || shown != lastLive) {
+                    lastPush = now; lastLive = shown
                     val measured = if (live) hr.measuredMs else fb?.time?.toEpochMilli() ?: hr.measuredMs
                     val payload = ServerPush.payload(shown, measured, values, now)
                     launch {
-                        val err = push.send(payload)
-                        val text = "${LocalTime.now().format(TIME)} " + (err?.let { "failed: $it" } ?: "ok")
+                        val r = push.send(payload)
+                        val text = "${r.describe()} at ${LocalTime.now().format(TIME)}"
                         _status.update { it.copy(server = text) }
+                        updateNotification("Server: $text · ${values["bpm"]?.let { "$it bpm" } ?: "no heart rate"}")
                     }
                 }
                 _status.update {
                     it.copy(
-                        values = values, presence = act,
-                        pulsoid = if (pulsoid.socketUp) "WebSocket connected" else "WebSocket down, polling",
+                        values = values, heartRate = hrText,
+                        pulsoid = when {
+                            pulsoid == null -> "no token set"
+                            pulsoid.socketUp -> "WebSocket connected"
+                            else -> "WebSocket down, polling"
+                        },
                     )
                 }
                 delay(1000)
             }
         } finally {
-            pulsoid.stop()
-        }
-    }
-
-    /** Presence test without Pulsoid: a counter every 15 s, to check background behaviour. */
-    private suspend fun testLoop() {
-        val appId = ConfigStore(this).load()["DISCORD_APP_ID"].toLongOrNull()
-            ?: return problem("Set the Discord application ID in Settings")
-        DiscordPresence.start(this@PresenceService, appId)
-        val started = System.currentTimeMillis()
-        var n = 0
-        while (true) {
-            n++
-            val now = LocalTime.now().format(TIME)
-            DiscordPresence.update(
-                PresenceActivity(
-                    details = "Presence test #$n", state = "updated $now",
-                    largeImage = "https://placehold.co/512x512/ED4245/FFFFFF/png?text=$n&font=montserrat",
-                    largeText = "Health Display test", startMs = started,
-                ),
-            )
-            delay(2_000)
-            updateNotification("Test #$n at $now: ${DiscordPresence.lastResult}")
-            delay(13_000)
+            pulsoid?.stop()
         }
     }
 
@@ -245,7 +204,6 @@ class PresenceService : LifecycleService() {
 
     override fun onDestroy() {
         loop?.cancel()
-        DiscordPresence.stop()
         _status.value = Status()
         super.onDestroy()
     }
@@ -255,10 +213,10 @@ class PresenceService : LifecycleService() {
 
     private fun notification(text: String): Notification {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Presence", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Sending to server", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(
-            this, 1, Intent(this, PresenceService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE,
+            this, 1, Intent(this, PushService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -272,20 +230,16 @@ class PresenceService : LifecycleService() {
     }
 
     companion object {
-        private const val CHANNEL = "presence"
+        private const val CHANNEL = "push"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "stop"
-        private const val ACTION_TEST = "test"
-        private const val REFRESH_MS = 10 * 60_000L
         private val TIME = DateTimeFormatter.ofPattern("HH:mm:ss")
 
         private val _status = MutableStateFlow(Status())
         val status: StateFlow<Status> = _status
 
-        fun start(ctx: Context, test: Boolean = false) = ctx.startForegroundService(
-            Intent(ctx, PresenceService::class.java).apply { if (test) action = ACTION_TEST },
-        )
+        fun start(ctx: Context) = ctx.startForegroundService(Intent(ctx, PushService::class.java))
 
-        fun stop(ctx: Context) = ctx.startService(Intent(ctx, PresenceService::class.java).setAction(ACTION_STOP))
+        fun stop(ctx: Context) = ctx.startService(Intent(ctx, PushService::class.java).setAction(ACTION_STOP))
     }
 }

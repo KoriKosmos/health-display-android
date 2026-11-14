@@ -10,28 +10,36 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/** Outcome of one push: the HTTP status (null if no response) and the error, if any. */
+data class PushResult(val code: Int?, val error: String?) {
+    val ok get() = error == null
+    fun describe() = if (ok) "ok (HTTP $code)" else "failed: $error"
+}
+
 /**
- * Sends the phone's current values to the Health Display server (docs/server-push.md), so
- * the server's presence shows the same numbers while the phone is active. The pushes are
- * also the server's "phone is active" signal: it falls back to its own sources when they stop.
+ * Sends the phone's current values to the Health Display server (docs/server-push.md),
+ * which owns the Discord presence. The pushes are also the server's "phone is active"
+ * signal: it falls back to its own sources when they stop.
  */
 class ServerPush(private val url: String, private val token: String) {
     private val http = OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).build()
-    private var lastError: String? = null
+    private var lastError: String? = "init"
 
-    /** Returns null on success, or the error. Errors are logged once until it works again. */
-    suspend fun send(payload: JSONObject): String? = withContext(Dispatchers.IO) {
-        val error = runCatching {
+    /** Errors are logged once until it works again. */
+    suspend fun send(payload: JSONObject): PushResult = withContext(Dispatchers.IO) {
+        val result = runCatching {
             val req = Request.Builder().url(url)
                 .header("Authorization", "Bearer $token")
                 .header("User-Agent", "Health-Display-Android")
                 .post(payload.toString().toRequestBody("application/json".toMediaType()))
                 .build()
-            http.newCall(req).execute().use { r -> if (r.isSuccessful) null else "HTTP ${r.code} ${r.body.string().take(200)}" }
-        }.getOrElse { it.toString() }
-        if (error != lastError) AppLog.log("server", error?.let { "push failed: $it" } ?: "pushing to $url")
-        lastError = error
-        error
+            http.newCall(req).execute().use { r ->
+                PushResult(r.code, if (r.isSuccessful) null else "HTTP ${r.code} ${r.body.string().take(200)}")
+            }
+        }.getOrElse { PushResult(null, it.toString()) }
+        if (result.error != lastError) AppLog.log("server", result.error?.let { "push failed: $it" } ?: "pushing to $url")
+        lastError = result.error
+        result
     }
 
     companion object {

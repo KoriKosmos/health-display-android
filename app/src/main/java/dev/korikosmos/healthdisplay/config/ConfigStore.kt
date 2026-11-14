@@ -36,7 +36,7 @@ class ConfigStore(private val context: Context) {
         }
     }
 
-    /** Import a pasted config.env; keys only the server uses (its Google OAuth client etc.) are skipped. */
+    /** Import a pasted config.env; keys only the server uses (presence layout, Discord app, its Google OAuth client) are skipped. */
     suspend fun importEnv(text: String): Int {
         val values = Config.parseEnv(text).filterKeys { it !in SERVER_ONLY }
         save(values)
@@ -62,8 +62,12 @@ class ConfigStore(private val context: Context) {
         private const val ENC = "__enc"
         private val RUNNING = booleanPreferencesKey("__running")
         val SECRETS = setOf("PULSOID_TOKEN", "PUSH_TOKEN")
-        // The phone signs in to Google through Play services, and uses GOOGLE_TOTALS instead of
-        // the server's per-feed totals + ROLLUP_SOURCES.
-        private val SERVER_ONLY = setOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ROLLUP_SOURCES")
+        // Keys in the server's config.env the phone doesn't use, so an import skips them: the
+        // presence itself (the server owns it), the server's Google OAuth client (the phone
+        // signs in through Play services) and ROLLUP_SOURCES (the phone uses GOOGLE_TOTALS).
+        private val SERVER_ONLY = setOf(
+            "DISCORD_APP_ID", "DETAILS", "STATE", "IMG_HOVER", "IMAGE", "IMG_TEXT", "IMG_BG", "IMG_FG",
+            "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ROLLUP_SOURCES",
+        )
     }
 }

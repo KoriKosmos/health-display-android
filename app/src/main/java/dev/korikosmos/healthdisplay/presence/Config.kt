@@ -18,7 +18,6 @@ data class Config(val values: Map<String, String> = emptyMap()) {
     val hrFallbackMaxAge get() = double("HR_FALLBACK_MAX_AGE")
     val hrFallbackInterval get() = double("HR_FALLBACK_INTERVAL")
     val googleOn get() = this["GOOGLE_HEALTH"].equals("on", ignoreCase = true)
-    val imageOn get() = !this["IMAGE"].equals("off", ignoreCase = true)
 
     /** Source preference for a stat group: SOURCE_<GROUP>, else SOURCE_DEFAULT. */
     fun sourceOrder(group: String): List<String> =
@@ -29,13 +28,9 @@ data class Config(val values: Map<String, String> = emptyMap()) {
 
     companion object {
         val DEFAULTS = mapOf(
-            "PULSOID_TOKEN" to "", "DISCORD_APP_ID" to "",
-            "DETAILS" to "❤️ {bpm} bpm · {bpm_age} · RHR {rhr} · HRV {hrv}ms",
-            "STATE" to "👟 {steps} · ⏱ {active} min active · 😴 {sleep}",
-            "IMG_HOVER" to "min {min} · avg {avg} · max {max}",
+            "PULSOID_TOKEN" to "",
             "SOURCE_DEFAULT" to "watch,oura,ultrahuman,*,samsung,phone",
             "STAT_MAX_AGE_DAYS" to "1.5",
-            "IMAGE" to "on", "IMG_TEXT" to "{bpm}", "IMG_BG" to "ED4245", "IMG_FG" to "FFFFFF",
             "POLL_INTERVAL" to "3", "UPDATE_INTERVAL" to "15", "STALE_AFTER" to "60",
             // Heart-rate fallback when Pulsoid isn't live: max age of a Health Connect sample to
             // show as "~72" (0 = off), and how often to look (s).
@@ -48,8 +43,8 @@ data class Config(val values: Map<String, String> = emptyMap()) {
             "GOOGLE_HEALTH" to "off",
             "GOOGLE_INTERVAL" to "300",
             "GOOGLE_TOTALS" to "all-sources",
-            // Send the phone's values to the Health Display server (docs/server-push.md);
-            // off while PUSH_URL is empty. Same keys in the server's config.env.
+            // Where the phone sends its values: the Health Display server, which owns the
+            // Discord presence (docs/server-push.md). Same keys in the server's config.env.
             "PUSH_URL" to "", "PUSH_TOKEN" to "",
         )
 

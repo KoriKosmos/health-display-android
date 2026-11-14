@@ -34,33 +34,23 @@ import kotlinx.coroutines.launch
 private data class Field(val key: String, val label: String, val help: String = "", val secret: Boolean = false, val number: Boolean = false)
 
 private val FIELDS = listOf(
-    Field("PULSOID_TOKEN", "Pulsoid token", "scope data:heart_rate:read", secret = true),
-    Field("DISCORD_APP_ID", "Discord application ID", "the app's name shows as \"Playing <name>\"", number = true),
-    Field("DETAILS", "First line (DETAILS)"),
-    Field("STATE", "Second line (STATE)"),
-    Field("IMG_HOVER", "Image hover text (IMG_HOVER)"),
-    Field("IMAGE", "BPM image tile (on/off)"),
-    Field("IMG_TEXT", "Tile text (IMG_TEXT)"),
-    Field("IMG_BG", "Tile background (hex)"),
-    Field("IMG_FG", "Tile text colour (hex)"),
-    Field("SOURCE_DEFAULT", "Source preference (ties only)", "watch, oura, ultrahuman, samsung, phone, <package>, *"),
-    Field("STAT_MAX_AGE_DAYS", "Hide overnight stats older than (days)"),
-    Field("POLL_INTERVAL", "Pulsoid poll fallback (s)", number = true),
-    Field("UPDATE_INTERVAL", "Min gap between Discord updates (s)", number = true),
-    Field("STALE_AFTER", "Clear after no heart rate for (s)", number = true),
-    Field("STATS_INTERVAL", "Health Connect refresh (s)", number = true),
-    Field("HR_FALLBACK_MAX_AGE", "Heart-rate fallback: max age (s, 0 = off)", "when Pulsoid isn't live, show a recent watch/ring reading as ~72", number = true),
-    Field("HR_FALLBACK_INTERVAL", "Heart-rate fallback: check every (s)", number = true),
-    Field("PUSH_URL", "Server push URL (optional)", "e.g. https://health.korikosmos.dev/push; empty = off"),
+    Field("PUSH_URL", "Server push URL", "e.g. https://health.korikosmos.dev/push"),
     Field("PUSH_TOKEN", "Server push token", "same PUSH_TOKEN as the server's config.env", secret = true),
+    Field("PULSOID_TOKEN", "Pulsoid token (optional)", "scope data:heart_rate:read; without it only stats are sent", secret = true),
+    Field("UPDATE_INTERVAL", "Push every (s)", number = true),
+    Field("POLL_INTERVAL", "Pulsoid poll fallback (s)", number = true),
+    Field("STALE_AFTER", "Heart rate counts as live for (s)", number = true),
+    Field("HR_FALLBACK_MAX_AGE", "Heart-rate fallback: max age (s, 0 = off)", "when Pulsoid isn't live, send a recent watch/ring reading as ~72", number = true),
+    Field("HR_FALLBACK_INTERVAL", "Heart-rate fallback: check every (s)", number = true),
+    Field("SOURCE_DEFAULT", "Source preference (ties only)", "watch, oura, ultrahuman, samsung, phone, <package>, *"),
+    Field("STAT_MAX_AGE_DAYS", "Ignore overnight stats older than (days)"),
+    Field("STATS_INTERVAL", "Health Connect refresh (s)", number = true),
 )
 
-private const val PLACEHOLDERS =
-    "Placeholders: {bpm} {min} {max} {avg} {bpm_age} {bpm_src} · {steps} {distance} {calories} {active_kcal} {active} {active_mv} " +
-        "{floors} {kcal_in} · {rhr} {hrv} {spo2} {resp} {temp_delta} {vo2max} · {sleep} {sleep_eff} {deep} {rem} " +
-        "{light} {awake} · {workout} {workout_time} {weight} {glucose} {glucose_mgdl} · {steps_src} {sleep_src} " +
-        "{rhr_src} {hrv_src} · {azm} {fitness} {ecg} (Google Health only) · {mindful} (Health Connect only). " +
-        "A ' · ' segment is left out when any of its values is missing."
+private const val ABOUT =
+    "The phone sends its values to your Health Display server, which shows them in your Discord " +
+        "presence with the layout from the server's config.env. Importing that file here sets the push " +
+        "URL and token too; the presence layout and Discord keys in it are ignored."
 
 @Composable
 fun SettingsScreen(store: ConfigStore) {
@@ -87,7 +77,7 @@ fun SettingsScreen(store: ConfigStore) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        Text(PLACEHOLDERS, style = MaterialTheme.typography.bodySmall)
+        Text(ABOUT, style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
                 scope.launch {
@@ -108,7 +98,7 @@ fun SettingsScreen(store: ConfigStore) {
         Text("Import config.env", style = MaterialTheme.typography.titleSmall)
         Text(
             "Paste the server's config.env (or any KEY=VALUE lines, e.g. SOURCE_SLEEP=oura,watch,*). " +
-                "Google OAuth keys are ignored.",
+                "Keys only the server uses are ignored.",
             style = MaterialTheme.typography.bodySmall,
         )
         OutlinedTextField(

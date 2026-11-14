@@ -9,13 +9,13 @@ class ConfigTest {
             """
             # comment
             PULSOID_TOKEN="abc"
-            DETAILS=❤️ {bpm} bpm · RHR {rhr}
+            STAT_MAX_AGE_DAYS=2
             SOURCE_SLEEP = oura,watch,*
             junk line
             """.trimIndent(),
         )
         assertEquals("abc", v["PULSOID_TOKEN"])
-        assertEquals("❤️ {bpm} bpm · RHR {rhr}", v["DETAILS"])
+        assertEquals(2.0, Config(v).statMaxAgeDays, 0.0)
         assertEquals(listOf("oura", "watch", "*"), Config(v).sourceOrder("SLEEP"))
         assertEquals(listOf("watch", "oura", "ultrahuman", "*", "samsung", "phone"), Config(v).sourceOrder("STEPS"))
     }

@@ -29,13 +29,8 @@ class HrFallbackTest {
         assertNull(HrFallback.usable(r(66, 10, "oura"), now, Config(mapOf("HR_FALLBACK_MAX_AGE" to "0"))))
     }
 
-    @Test fun valuesAndPresence() {
+    @Test fun values() {
         assertEquals(mapOf("bpm" to "~72", "bpm_age" to "just now", "bpm_src" to "oura"), HrFallback.values(r(72, 20, "oura"), now))
         assertEquals("8 min ago", HrFallback.values(r(72, 480, "watch"), now)["bpm_age"])
-        val values = mapOf("min" to "60", "avg" to "70", "max" to "90", "rhr" to "55") + HrFallback.values(r(72, 480, "watch"), now)
-        val a = ActivityBuilder.build("~72", values, Config(), 0)!!
-        assertEquals("❤️ ~72 bpm · 8 min ago · RHR 55", a.details)
-        assertEquals("https://placehold.co/512x512/ED4245/FFFFFF/png?text=~72&font=montserrat", a.largeImage)
-        assertEquals("min 60 · avg 70 · max 90", a.largeText)
     }
 }

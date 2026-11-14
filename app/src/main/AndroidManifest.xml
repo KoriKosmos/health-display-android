@@ -78,12 +78,12 @@
         </activity-alias>
 
         <service
-            android:name=".PresenceService"
+            android:name=".PushService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the user's live heart rate shown as Discord Rich Presence" />
+                android:value="Sends the user's live heart rate and health stats to their own Health Display server" />
         </service>
 
         <receiver
