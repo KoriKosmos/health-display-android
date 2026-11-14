@@ -16,5 +16,5 @@ captures/
 keystore.properties
 secrets.properties
 
-# Discord Social SDK (download from the developer portal; not redistributable)
-third_party/discord_social_sdk/
+# Discord Social SDK from earlier versions (no longer used)
+third_party/
